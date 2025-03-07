@@ -37,4 +37,4 @@ class Kernel extends HttpKernel
      * @var array<string, class-string|string>
      */
     protected $middlewareAliases = [];
-} 
+}

@@ -14,13 +14,13 @@ class TeamSeeder extends Seeder
                 'name' => 'Manchester City',
                 'country' => 'England',
                 'logo' => 'https://upload.wikimedia.org/wikipedia/tr/f/f6/Manchester_City.png',
-                'strength' => 95 
+                'strength' => 95
             ],
             [
                 'name' => 'Real Madrid',
                 'country' => 'Spain',
                 'logo' => 'https://upload.wikimedia.org/wikipedia/tr/9/98/Real_Madrid.png',
-                'strength' => 96 
+                'strength' => 96
             ],
             [
                 'name' => 'Bayern Munich',
@@ -88,4 +88,4 @@ class TeamSeeder extends Seeder
             Team::create($team);
         }
     }
-} 
+}
