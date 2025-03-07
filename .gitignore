@@ -21,3 +21,7 @@ yarn-error.log
 /.nova
 /.vscode
 /.zed
+.DS_Store
+.idea
+composer.lock
+package-lock.json
