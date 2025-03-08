@@ -62,7 +62,7 @@ php artisan migrate:fresh --seed
 
 5. Build assets
 ```bash
-npm run build
+composer run dev
 ```
 
 ## Features
@@ -146,6 +146,30 @@ Comprehensive test suite covering:
 - Team strength impact
 - Score distribution
 - Championship predictions
+
+## Running Tests
+
+1. Run all tests:
+```bash
+php artisan test
+```
+
+### Test Scenarios
+
+1. Fixture Generation Tests:
+   - Verify each team plays against all other teams
+   - Ensure each team plays only one match per week
+   - Check equal distribution of home/away matches
+
+2. Match Simulation Tests:
+   - Validate score generation based on team strengths
+   - Test home advantage calculation
+   - Verify match results update standings correctly
+
+3. Standings Tests:
+   - Check correct calculation of win/draw/loss points
+   - Verify goal difference calculation
+   - Test proper application of ranking criteria
 
 ## Usage
 

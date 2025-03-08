@@ -10,7 +10,7 @@ export default function AppLayout({ title, children }) {
                         <div className="flex">
                             <div className="flex-shrink-0 flex items-center">
                                 <Link href="/" className="text-xl font-bold text-gray-800">
-                                    Premier League
+                                    Champions League
                                 </Link>
                             </div>
                         </div>

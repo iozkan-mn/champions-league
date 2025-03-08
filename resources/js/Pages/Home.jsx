@@ -58,7 +58,7 @@ export default function Home({ games = [], teams = [], currentWeek = 1, hasSched
     ];
 
     return (
-        <AppLayout title="Premier League Simulation">
+        <AppLayout title="Championship League Simulation">
             <div className="space-y-6">
                 {games.length > 0 && (
                     <div className="mt-8">
