@@ -5,38 +5,47 @@ import Button from '@/Components/Button';
 import Table from '@/Components/Table';
 import TableRow from '@/Components/TableRow';
 import TableCell from '@/Components/TableCell';
+import axios from 'axios';
 
 export default function Home({ games = [], teams = [], currentWeek = 1, hasScheduledGames = false, predictions = null }) {
     const generateFixtures = () => {
-        router.post(route('games.generate-fixtures'));
+        axios.post(route('games.generate-fixtures'))
+            .then(response => {
+                window.location.reload();
+            })
+            .catch(error => {
+                console.error('Error generating fixtures:', error);
+            });
     };
 
     const simulateWeek = () => {
-        router.post(route('games.simulate-week'), {
-            week: currentWeek
-        }, {
-            preserveScroll: true,
-            preserveState: true,
-            onSuccess: () => {
-                router.reload();
-            }
-        });
+        axios.post(route('games.simulate-week'))
+            .then(response => {
+                window.location.reload();
+            })
+            .catch(error => {
+                console.error('Error simulating week:', error);
+            });
+    };
+
+    const simulateAll = () => {
+        axios.post(route('games.play-all-weeks'))
+            .then(response => {
+                window.location.reload();
+            })
+            .catch(error => {
+                console.error('Error simulating all weeks:', error);
+            });
     };
 
     const resetData = () => {
-        if (confirm('Are you sure you want to reset all data? This action cannot be undone.')) {
-            router.post(route('games.reset-data'));
-        }
-    };
-
-    const playAllWeeks = () => {
-        if (confirm('Are you sure you want to simulate all remaining weeks?')) {
-            router.post(route('games.play-all-weeks'), {}, {
-                onSuccess: () => {
-                    router.reload();
-                }
+        axios.post(route('games.reset-data'))
+            .then(response => {
+                window.location.reload();
+            })
+            .catch(error => {
+                console.error('Error resetting data:', error);
             });
-        }
     };
 
     const tableHeaders = [
@@ -137,7 +146,7 @@ export default function Home({ games = [], teams = [], currentWeek = 1, hasSched
                                 <Button onClick={simulateWeek}>
                                     Simulate Week {currentWeek}
                                 </Button>
-                                <Button onClick={playAllWeeks}>
+                                <Button onClick={simulateAll}>
                                     Play All Weeks
                                 </Button>
                             </>

@@ -4,44 +4,23 @@ namespace App\Http\Controllers;
 
 use App\Models\Game;
 use App\Models\Team;
-use App\Http\Controllers\GameController;
+use App\Services\ChampionshipService;
 use Inertia\Inertia;
+use Inertia\Response;
 
 class HomeController extends Controller
 {
-    protected $gameController;
+    public function __construct(
+        private readonly ChampionshipService $championshipService
+    ) {}
 
-    public function __construct(GameController $gameController)
+    public function index(): Response
     {
-        $this->gameController = $gameController;
-    }
-
-    public function index()
-    {
-        $games = Game::with(['homeTeam', 'awayTeam'])
-            ->orderBy('week')
-            ->orderBy('match_date')
-            ->get();
-
-        // Eager load teams with their standings
         $teams = Team::with('standing')->get();
-
-        // Find the earliest week that has scheduled games
-        $currentWeek = $games->where('status', 'scheduled')->min('week');
-        if ($currentWeek === null) {
-            $currentWeek = $games->max('week') ?? 1;
-        }
-
-        // Check if there are any scheduled games for the current week
-        $hasScheduledGames = $games->where('status', 'scheduled')
-            ->where('week', $currentWeek)
-            ->isNotEmpty();
-
-        // Calculate predictions if there are fixtures
-        $predictions = null;
-        if ($games->isNotEmpty()) {
-            $predictions = $this->gameController->calculateChampionshipPredictions($teams);
-        }
+        $games = Game::with(['homeTeam', 'awayTeam'])->orderBy('week')->orderBy('match_date')->get();
+        $currentWeek = $this->championshipService->getCurrentWeek($games);
+        $hasScheduledGames = $this->championshipService->hasScheduledGamesForWeek($games, $currentWeek);
+        $predictions = $this->championshipService->calculateChampionshipPredictions($teams);
 
         return Inertia::render('Home', [
             'games' => $games,

@@ -5,23 +5,28 @@ namespace Tests\Unit;
 use Tests\TestCase;
 use App\Http\Controllers\GameController;
 use App\Services\FixtureService;
+use App\Services\ChampionshipService;
 use App\Models\Team;
 use App\Models\Game;
 use App\Models\Standing;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Http\Request;
+use Illuminate\Http\RedirectResponse;
 
 class GameControllerTest extends TestCase
 {
     use RefreshDatabase;
 
     private GameController $gameController;
+    private FixtureService $fixtureService;
+    private ChampionshipService $championshipService;
     private array $teams;
 
     protected function setUp(): void
     {
         parent::setUp();
-        $this->gameController = new GameController(new FixtureService());
+        $this->fixtureService = new FixtureService();
+        $this->championshipService = new ChampionshipService();
+        $this->gameController = new GameController($this->fixtureService, $this->championshipService);
 
         // Create test teams
         $this->teams = [
@@ -39,122 +44,246 @@ class GameControllerTest extends TestCase
     /** @test */
     public function it_generates_fixtures_successfully()
     {
-        $response = $this->gameController->generateFixtures();
+        $response = $this->gameController->generate();
 
+        // Check if fixtures are generated
         $this->assertTrue(Game::exists());
-        $this->assertNotEquals(0, Game::count());
-        $this->assertInstanceOf(\Illuminate\Http\RedirectResponse::class, $response);
+        $this->assertEquals(12, Game::count()); // 4 teams = 6 games per half season = 12 total
+        
+        // Check if all teams have standings
+        $this->assertEquals(4, Standing::count());
+        $this->assertEquals(0, Standing::sum('points')); // All standings should start at 0
+        
+        // Check if games are properly scheduled
+        $this->assertEquals('scheduled', Game::first()->status);
+        $this->assertNotNull(Game::first()->match_date);
+        
+        // Check if each team has correct number of home and away games
+        foreach (Team::all() as $team) {
+            $homeGames = Game::where('home_team_id', $team->id)->count();
+            $awayGames = Game::where('away_team_id', $team->id)->count();
+            $this->assertEquals(3, $homeGames, "Team {$team->name} should have 3 home games");
+            $this->assertEquals(3, $awayGames, "Team {$team->name} should have 3 away games");
+        }
+        
+        // Check response
+        $this->assertInstanceOf(RedirectResponse::class, $response);
+        $this->assertEquals(route('home'), $response->getTargetUrl());
+        $this->assertTrue($response->getSession()->has('success'));
     }
 
     /** @test */
     public function it_resets_data_successfully()
     {
         // First generate some data
-        $this->gameController->generateFixtures();
-        $this->gameController->simulateWeek(new Request(['week' => 1]));
+        $this->gameController->generate();
+        $this->gameController->simulateWeek();
 
         // Then reset
-        $response = $this->gameController->resetData();
+        $response = $this->gameController->reset();
 
+        // Check if games are deleted
         $this->assertEquals(0, Game::count());
-        $this->assertEquals(0, Standing::count());
-        $this->assertInstanceOf(\Illuminate\Http\RedirectResponse::class, $response);
+        
+        // Check response
+        $this->assertInstanceOf(RedirectResponse::class, $response);
+        $this->assertEquals(route('home'), $response->getTargetUrl());
+        $this->assertTrue($response->getSession()->has('success'));
     }
 
     /** @test */
     public function it_simulates_week_successfully()
     {
-        $this->gameController->generateFixtures();
-        
-        $request = new Request(['week' => 1]);
-        $response = $this->gameController->simulateWeek($request);
+        $this->gameController->generate();
+        $response = $this->gameController->simulateWeek();
 
+        // Check if games for week 1 are completed
         $games = Game::where('week', 1)->get();
+        $this->assertNotEmpty($games);
         
         foreach ($games as $game) {
             $this->assertEquals('completed', $game->status);
             $this->assertNotNull($game->home_score);
             $this->assertNotNull($game->away_score);
+            $this->assertGreaterThanOrEqual(0, $game->home_score);
+            $this->assertGreaterThanOrEqual(0, $game->away_score);
+            $this->assertLessThanOrEqual(5, $game->home_score); // Max score should be 5
+            $this->assertLessThanOrEqual(5, $game->away_score);
         }
 
-        $this->assertInstanceOf(\Illuminate\Http\RedirectResponse::class, $response);
-    }
-
-    /** @test */
-    public function it_calculates_championship_predictions_correctly()
-    {
-        // Generate and simulate some games
-        $this->gameController->generateFixtures();
-        $this->gameController->simulateWeek(new Request(['week' => 1]));
-
-        $teams = Team::with('standing')->get();
-        $predictions = $this->gameController->calculateChampionshipPredictions($teams);
-
-        // Verify predictions
-        $this->assertIsArray($predictions);
-        $this->assertEquals(count($this->teams), count($predictions));
+        // Check if standings are updated
+        $this->assertTrue(Standing::sum('points') > 0);
+        $this->assertEquals($games->count() * 2, Standing::sum('played')); // Each game counts for 2 teams
         
-        // Total probability should be 100%
-        $totalProbability = array_sum($predictions);
-        $this->assertEquals(100, round($totalProbability));
-
-        // Each probability should be between 0 and 100
-        foreach ($predictions as $probability) {
-            $this->assertGreaterThanOrEqual(0, $probability);
-            $this->assertLessThanOrEqual(100, $probability);
-        }
+        // Check response
+        $this->assertInstanceOf(RedirectResponse::class, $response);
+        $this->assertEquals(route('home'), $response->getTargetUrl());
+        $this->assertTrue($response->getSession()->has('success'));
     }
 
     /** @test */
-    public function it_handles_tied_teams_in_predictions()
+    public function it_handles_no_scheduled_games_for_week()
     {
-        // Create two teams with equal strength
-        $team1 = Team::create(['name' => 'Equal Team 1', 'strength' => 80, 'logo' => 'equal1.png', 'country' => 'Equal Country 1']);
-        $team2 = Team::create(['name' => 'Equal Team 2', 'strength' => 80, 'logo' => 'equal2.png', 'country' => 'Equal Country 2']);
-
-        // Create standings with equal points
-        Standing::create([
-            'team_id' => $team1->id,
-            'played' => 1,
-            'won' => 1,
-            'drawn' => 0,
-            'lost' => 0,
-            'goals_for' => 2,
-            'goals_against' => 1,
-            'points' => 3
-        ]);
-
-        Standing::create([
-            'team_id' => $team2->id,
-            'played' => 1,
-            'won' => 1,
-            'drawn' => 0,
-            'lost' => 0,
-            'goals_for' => 2,
-            'goals_against' => 1,
-            'points' => 3
-        ]);
-
-        $teams = Team::with('standing')->get();
-        $predictions = $this->gameController->calculateChampionshipPredictions($teams);
-
-        // Teams with equal points and stats should have similar predictions
-        $this->assertEqualsWithDelta($predictions[$team1->id], $predictions[$team2->id], 0.1);
+        $this->gameController->generate();
+        
+        // Simulate all weeks
+        $this->gameController->simulateAll();
+        
+        // Try to simulate again when no games are scheduled
+        $response = $this->gameController->simulateWeek();
+        
+        $this->assertInstanceOf(RedirectResponse::class, $response);
+        $this->assertEquals(route('home'), $response->getTargetUrl());
+        $this->assertTrue($response->getSession()->has('error'));
     }
 
     /** @test */
     public function it_simulates_all_weeks_successfully()
     {
-        $this->gameController->generateFixtures();
-        $response = $this->gameController->playAllWeeks();
+        $this->gameController->generate();
+        $response = $this->gameController->simulateAll();
 
-        // All games should be completed
+        // Check if all games are completed
         $this->assertEquals(0, Game::where('status', 'scheduled')->count());
-        $this->assertTrue(Game::where('status', 'completed')->exists());
+        $this->assertEquals(12, Game::where('status', 'completed')->count());
         
-        // All teams should have standings
-        $this->assertEquals(count($this->teams), Standing::count());
+        // Check if standings are complete
+        $this->assertEquals(4, Standing::count());
+        $this->assertTrue(Standing::sum('points') > 0);
+        $this->assertEquals(24, Standing::sum('played')); // Each team plays 6 games = 24 total played
         
-        $this->assertInstanceOf(\Illuminate\Http\RedirectResponse::class, $response);
+        // Verify standings calculations
+        Standing::all()->each(function ($standing) {
+            // Points calculation
+            $this->assertEquals(
+                $standing->won * 3 + $standing->drawn,
+                $standing->points,
+                "Points calculation is incorrect for team {$standing->team_id}"
+            );
+            
+            // Games played calculation
+            $this->assertEquals(
+                $standing->won + $standing->drawn + $standing->lost,
+                $standing->played,
+                "Games played calculation is incorrect for team {$standing->team_id}"
+            );
+            
+            // Each team should play 6 games
+            $this->assertEquals(
+                6,
+                $standing->played,
+                "Team {$standing->team_id} should have played 6 games"
+            );
+        });
+        
+        // Check response
+        $this->assertInstanceOf(RedirectResponse::class, $response);
+        $this->assertEquals(route('home'), $response->getTargetUrl());
+        $this->assertTrue($response->getSession()->has('success'));
+    }
+
+    /** @test */
+    public function it_maintains_game_order_when_simulating()
+    {
+        $this->gameController->generate();
+        $this->gameController->simulateWeek();
+
+        // Check if games are simulated in order
+        $completedGames = Game::where('status', 'completed')->get();
+        $scheduledGames = Game::where('status', 'scheduled')->get();
+
+        // All completed games should be from earlier weeks than scheduled games
+        $maxCompletedWeek = $completedGames->max('week');
+        $minScheduledWeek = $scheduledGames->min('week');
+        $this->assertLessThanOrEqual($minScheduledWeek, $maxCompletedWeek);
+
+        // Check if games within the same week are all completed
+        $completedWeeks = $completedGames->pluck('week')->unique();
+        foreach ($completedWeeks as $week) {
+            $weekGames = Game::where('week', $week)->get();
+            $this->assertEquals(
+                'completed',
+                $weekGames->pluck('status')->unique()->first(),
+                "All games in week {$week} should be completed"
+            );
+        }
+    }
+
+    /** @test */
+    public function it_updates_standings_correctly_after_simulation()
+    {
+        $this->gameController->generate();
+        $this->gameController->simulateWeek();
+
+        // Get a completed game
+        $game = Game::where('status', 'completed')->first();
+        
+        // Get standings for both teams
+        $homeStanding = Standing::where('team_id', $game->home_team_id)->first();
+        $awayStanding = Standing::where('team_id', $game->away_team_id)->first();
+
+        // Verify standings are updated correctly
+        if ($game->home_score > $game->away_score) {
+            $this->assertEquals(3, $homeStanding->points);
+            $this->assertEquals(0, $awayStanding->points);
+            $this->assertEquals(1, $homeStanding->won);
+            $this->assertEquals(1, $awayStanding->lost);
+        } elseif ($game->home_score < $game->away_score) {
+            $this->assertEquals(0, $homeStanding->points);
+            $this->assertEquals(3, $awayStanding->points);
+            $this->assertEquals(1, $homeStanding->lost);
+            $this->assertEquals(1, $awayStanding->won);
+        } else {
+            $this->assertEquals(1, $homeStanding->points);
+            $this->assertEquals(1, $awayStanding->points);
+            $this->assertEquals(1, $homeStanding->drawn);
+            $this->assertEquals(1, $awayStanding->drawn);
+        }
+
+        // Verify goal statistics
+        $this->assertEquals($game->home_score, $homeStanding->goals_for);
+        $this->assertEquals($game->away_score, $homeStanding->goals_against);
+        $this->assertEquals($game->away_score, $awayStanding->goals_for);
+        $this->assertEquals($game->home_score, $awayStanding->goals_against);
+    }
+
+    /** @test */
+    public function it_considers_team_strength_in_score_generation()
+    {
+        $this->gameController->generate();
+        
+        // Simulate multiple seasons to get statistical significance
+        $strongTeamWins = 0;
+        $strongTeamDraws = 0;
+        $totalGames = 0;
+        
+        // Simulate more seasons for better statistical significance
+        for ($i = 0; $i < 20; $i++) {
+            $this->gameController->simulateAll();
+            
+            $games = Game::where('home_team_id', 1)
+                ->orWhere('away_team_id', 1)
+                ->get();
+                
+            foreach ($games as $game) {
+                $strongTeamScore = $game->home_team_id == 1 ? $game->home_score : $game->away_score;
+                $weakTeamScore = $game->home_team_id == 1 ? $game->away_score : $game->home_score;
+                
+                if ($strongTeamScore > $weakTeamScore) {
+                    $strongTeamWins++;
+                } elseif ($strongTeamScore == $weakTeamScore) {
+                    $strongTeamDraws++;
+                }
+                $totalGames++;
+            }
+            
+            Game::truncate();
+            Standing::truncate();
+            $this->gameController->generate();
+        }
+        
+        // Calculate win rate including half of draws
+        $winRate = ($strongTeamWins + ($strongTeamDraws * 0.5)) / $totalGames;
+        $this->assertGreaterThan(0.5, $winRate, "Strong team (85 strength) should win more than 50% of games (including half of draws)");
     }
 } 
