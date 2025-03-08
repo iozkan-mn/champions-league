@@ -53,8 +53,8 @@ class ChampionshipService
 
     public function getCurrentWeek(Collection $games): int
     {
-        return $games->where('status', 'scheduled')->min('week') 
-            ?? $games->max('week') 
+        return $games->where('status', 'scheduled')->min('week')
+            ?? $games->max('week')
             ?? 1;
     }
 
@@ -93,7 +93,7 @@ class ChampionshipService
         $awayStanding->save();
     }
 
-    private function updateTeamStats(Standing $standing, int $goalsFor, int $goalsAgainst, bool $isHome): void
+    private function updateTeamStats(Standing $standing, int $goalsFor, int $goalsAgainst): void
     {
         $standing->played++;
         $standing->goals_for += $goalsFor;
@@ -148,12 +148,12 @@ class ChampionshipService
     {
         $comparisonResults = $this->calculateTiebreakerStats($championIds, $completedGames);
         $sortedChampions = $this->sortByTiebreakers($championIds, $comparisonResults);
-        
+
         $predictions = [];
         foreach ($teams as $team) {
             $predictions[$team->id] = ($team->id === $sortedChampions[0]) ? 100 : 0;
         }
-        
+
         return $predictions;
     }
 
@@ -163,7 +163,7 @@ class ChampionshipService
         foreach ($championIds as $teamId) {
             $team = Team::find($teamId);
             $h2hStats = $this->calculateHeadToHeadStats($teamId, $championIds, $completedGames);
-            
+
             $results[$teamId] = array_merge([
                 'goalDiff' => $team->standing->goals_for - $team->standing->goals_against,
                 'goalsScored' => $team->standing->goals_for
@@ -177,7 +177,9 @@ class ChampionshipService
         $stats = ['h2hPoints' => 0, 'h2hGoalDiff' => 0, 'h2hGoalsScored' => 0];
 
         foreach ($opposingIds as $opposingId) {
-            if ($teamId === $opposingId) continue;
+            if ($teamId === $opposingId) {
+                continue;
+            }
 
             $h2hGames = $this->getHeadToHeadGames($teamId, $opposingId, $completedGames);
             foreach ($h2hGames as $game) {
@@ -212,8 +214,12 @@ class ChampionshipService
 
     private function calculatePoints(int $goalDiff): int
     {
-        if ($goalDiff > 0) return 3;
-        if ($goalDiff === 0) return 1;
+        if ($goalDiff > 0) {
+            return 3;
+        }
+        if ($goalDiff === 0) {
+            return 1;
+        }
         return 0;
     }
 
@@ -221,12 +227,14 @@ class ChampionshipService
     {
         usort($championIds, function($a, $b) use ($comparisonResults) {
             $tiebreakers = ['h2hPoints', 'h2hGoalDiff', 'h2hGoalsScored', 'goalDiff', 'goalsScored'];
-            
+
             foreach ($tiebreakers as $tiebreaker) {
                 $diff = $comparisonResults[$b][$tiebreaker] - $comparisonResults[$a][$tiebreaker];
-                if ($diff !== 0) return $diff;
+                if ($diff !== 0) {
+                    return $diff;
+                }
             }
-            
+
             return 0;
         });
 
@@ -297,7 +305,9 @@ class ChampionshipService
     private function normalizePredictions(array $predictions): array
     {
         $total = array_sum($predictions);
-        if ($total <= 0) return $predictions;
+        if ($total <= 0) {
+            return $predictions;
+        }
 
         return array_map(function ($probability) use ($total) {
             return round(($probability / $total) * 100, 1);
@@ -320,8 +330,12 @@ class ChampionshipService
 
     private function calculateFormFactor($team): float
     {
-        if (!$team->standing) return 0;
-        if ($team->standing->played === 0) return 0.5;
+        if (!$team->standing) {
+            return 0;
+        }
+        if ($team->standing->played === 0) {
+            return 0.5;
+        }
 
         $winRatio = $team->standing->won / $team->standing->played;
         $goalDifferencePerGame = ($team->standing->goals_for - $team->standing->goals_against) / $team->standing->played;
@@ -329,28 +343,4 @@ class ChampionshipService
 
         return ($winRatio + $goalFactor + 1) / 2;
     }
-
-    private function generateScore(Team $team): int
-    {
-        // Base score between 0-3
-        $baseScore = random_int(0, 3);
-        
-        // Add strength bonus (0-3 extra goals based on strength)
-        $strengthBonus = floor($team->strength / 20); // Increased strength impact
-        
-        // Always apply some strength bonus for strong teams
-        $minBonus = floor($team->strength / 50); // Minimum bonus based on strength
-        $extraBonus = $strengthBonus - $minBonus;
-        
-        // Apply minimum bonus always, and extra bonus with probability
-        $score = $baseScore + $minBonus;
-        
-        // 80% chance to apply extra bonus for strong teams
-        $strengthChance = min(80, floor($team->strength / 1.5));
-        if (random_int(1, 100) <= $strengthChance) {
-            $score += $extraBonus;
-        }
-        
-        return min(5, $score);
-    }
-} 
+}

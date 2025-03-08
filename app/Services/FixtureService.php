@@ -78,7 +78,9 @@ class FixtureService
 
     private function rotateTeams(array &$teamIds): void
     {
-        if (count($teamIds) < 2) return;
+        if (count($teamIds) < 2) {
+            return;
+        }
 
         $lastElement = array_pop($teamIds);
         array_splice($teamIds, 1, 0, [$lastElement]);
