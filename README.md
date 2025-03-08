@@ -152,7 +152,3 @@ Comprehensive test suite covering:
 1. Generate fixtures using the "Generate" button
 2. Simulate matches week by week or all at once
 3. View standings and predictions updated in real-time
-
-## License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
