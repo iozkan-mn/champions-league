@@ -77,13 +77,19 @@ class GameControllerTest extends TestCase
     {
         // First generate some data
         $this->gameController->generate();
+        $this->championshipService->ensureAllTeamsHaveStandings();
         $this->gameController->simulateWeek();
+
+        // Verify we have data
+        $this->assertTrue(Game::exists());
+        $this->assertTrue(Standing::exists());
 
         // Then reset
         $response = $this->gameController->reset();
 
-        // Check if games are deleted
+        // Check if games and standings are deleted
         $this->assertEquals(0, Game::count());
+        $this->assertEquals(0, Standing::count());
         
         // Check response
         $this->assertInstanceOf(RedirectResponse::class, $response);

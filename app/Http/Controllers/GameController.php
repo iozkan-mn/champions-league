@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Game;
 use App\Models\Team;
+use App\Models\Standing;
 use App\Services\ChampionshipService;
 use App\Services\FixtureService;
 use Illuminate\Http\RedirectResponse;
@@ -38,7 +39,11 @@ class GameController extends Controller
     public function reset(): RedirectResponse
     {
         Game::truncate();
-        return redirect()->route('home')->with('success', 'All games have been reset.');
+        Standing::truncate();
+        
+        return redirect()
+            ->route('home')
+            ->with('success', 'All games and standings have been reset.');
     }
 
     public function simulateWeek(): RedirectResponse
