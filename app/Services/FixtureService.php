@@ -22,7 +22,7 @@ class FixtureService
         $startDate = Carbon::now()->startOfWeek();
 
         Game::truncate();
-        
+
         $firstHalfFixtures = $this->generateFirstHalfFixtures($teams, $teamCount, $rounds, $startDate);
         $this->createFixtures($firstHalfFixtures);
         $this->createSecondHalfFixtures($firstHalfFixtures, $rounds, $startDate);
@@ -149,10 +149,10 @@ class FixtureService
         $baseStrength = $team->strength;
         $formBonus = $this->calculateFormBonus($team);
         $randomFactor = mt_rand(...self::RANDOM_RANGE);
-        
-        return $baseStrength + 
-            ($isHome ? self::HOME_ADVANTAGE : 0) + 
-            $formBonus + 
+
+        return $baseStrength +
+            ($isHome ? self::HOME_ADVANTAGE : 0) +
+            $formBonus +
             $randomFactor;
     }
 
@@ -168,16 +168,16 @@ class FixtureService
     private function calculateScores(float $homeStrengthAdjusted, float $awayStrengthAdjusted): array
     {
         $totalStrength = $homeStrengthAdjusted + $awayStrengthAdjusted;
-        
+
         $homeScoreProb = $this->calculateScoringProbability(
-            $homeStrengthAdjusted, 
-            $totalStrength, 
+            $homeStrengthAdjusted,
+            $totalStrength,
             self::HOME_SCORE_MULTIPLIER
         );
-        
+
         $awayScoreProb = $this->calculateScoringProbability(
-            $awayStrengthAdjusted, 
-            $totalStrength, 
+            $awayStrengthAdjusted,
+            $totalStrength,
             self::AWAY_SCORE_MULTIPLIER
         );
 
@@ -190,7 +190,7 @@ class FixtureService
     private function calculateScoringProbability(float $strength, float $totalStrength, float $multiplier): float
     {
         $probability = ($strength / $totalStrength) * $multiplier;
-        return $multiplier === self::HOME_SCORE_MULTIPLIER 
+        return $multiplier === self::HOME_SCORE_MULTIPLIER
             ? min(0.8, max(0.2, $probability))
             : min(0.7, max(0.1, $probability));
     }
@@ -200,7 +200,7 @@ class FixtureService
         $scoreProbs = $this->getBaseScoreProbabilities();
         $strengthFactor = $strength / 100;
         $adjustedProbs = $this->adjustProbabilities($scoreProbs, $chance, $strengthFactor);
-        
+
         return $this->selectScoreFromProbabilities($adjustedProbs);
     }
 
