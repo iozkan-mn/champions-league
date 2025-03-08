@@ -17,6 +17,7 @@ class FixtureServiceTest extends TestCase
     private FixtureService $fixtureService;
     private ChampionshipService $championshipService;
     private array $teams;
+    private array $teamIds;
 
     protected function setUp(): void
     {
@@ -32,8 +33,16 @@ class FixtureServiceTest extends TestCase
             ['name' => 'Team 4', 'strength' => 70, 'logo' => 'logo4.png', 'country' => 'Country 4'],
         ];
 
+        // Ensure database is clean
+        Team::query()->delete();
+        Game::query()->delete();
+        Standing::query()->delete();
+
+        // Create teams and store their IDs
+        $this->teamIds = [];
         foreach ($this->teams as $team) {
-            Team::create($team);
+            $createdTeam = Team::create($team);
+            $this->teamIds[] = $createdTeam->id;
         }
     }
 
@@ -119,8 +128,12 @@ class FixtureServiceTest extends TestCase
     /** @test */
     public function it_considers_team_strength_in_score_generation()
     {
-        $strongTeam = Team::find(1); // 85 strength
-        $weakTeam = Team::find(4);   // 70 strength
+        // Get teams with error checking
+        $strongTeam = Team::find($this->teamIds[0]); // 85 strength
+        $weakTeam = Team::find($this->teamIds[3]);   // 70 strength
+        
+        $this->assertNotNull($strongTeam, 'Strong team not found in database');
+        $this->assertNotNull($weakTeam, 'Weak team not found in database');
         
         $strongTeamWins = 0;
         $totalGames = 100;

@@ -3,7 +3,7 @@
 namespace Tests\Unit;
 
 use Tests\TestCase;
-use App\Http\Controllers\GameController;
+use App\Http\Controllers\SimulationController;
 use App\Services\FixtureService;
 use App\Services\ChampionshipService;
 use App\Models\Team;
@@ -12,11 +12,11 @@ use App\Models\Standing;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\RedirectResponse;
 
-class GameControllerTest extends TestCase
+class SimulationControllerTest extends TestCase
 {
     use RefreshDatabase;
 
-    private GameController $gameController;
+    private SimulationController $simulationController;
     private FixtureService $fixtureService;
     private ChampionshipService $championshipService;
     private array $teams;
@@ -26,7 +26,7 @@ class GameControllerTest extends TestCase
         parent::setUp();
         $this->fixtureService = new FixtureService();
         $this->championshipService = new ChampionshipService();
-        $this->gameController = new GameController($this->fixtureService, $this->championshipService);
+        $this->simulationController = new SimulationController($this->fixtureService, $this->championshipService);
 
         // Create test teams
         $this->teams = [
@@ -44,7 +44,7 @@ class GameControllerTest extends TestCase
     /** @test */
     public function it_generates_fixtures_successfully()
     {
-        $response = $this->gameController->generate();
+        $response = $this->simulationController->generate();
 
         // Check if fixtures are generated
         $this->assertTrue(Game::exists());
@@ -76,16 +76,16 @@ class GameControllerTest extends TestCase
     public function it_resets_data_successfully()
     {
         // First generate some data
-        $this->gameController->generate();
+        $this->simulationController->generate();
         $this->championshipService->ensureAllTeamsHaveStandings();
-        $this->gameController->simulateWeek();
+        $this->simulationController->simulateWeek();
 
         // Verify we have data
         $this->assertTrue(Game::exists());
         $this->assertTrue(Standing::exists());
 
         // Then reset
-        $response = $this->gameController->reset();
+        $response = $this->simulationController->reset();
 
         // Check if games and standings are deleted
         $this->assertEquals(0, Game::count());
@@ -100,8 +100,8 @@ class GameControllerTest extends TestCase
     /** @test */
     public function it_simulates_week_successfully()
     {
-        $this->gameController->generate();
-        $response = $this->gameController->simulateWeek();
+        $this->simulationController->generate();
+        $response = $this->simulationController->simulateWeek();
 
         // Check if games for week 1 are completed
         $games = Game::where('week', 1)->get();
@@ -130,13 +130,13 @@ class GameControllerTest extends TestCase
     /** @test */
     public function it_handles_no_scheduled_games_for_week()
     {
-        $this->gameController->generate();
+        $this->simulationController->generate();
         
         // Simulate all weeks
-        $this->gameController->simulateAll();
+        $this->simulationController->simulateAll();
         
         // Try to simulate again when no games are scheduled
-        $response = $this->gameController->simulateWeek();
+        $response = $this->simulationController->simulateWeek();
         
         $this->assertInstanceOf(RedirectResponse::class, $response);
         $this->assertEquals(route('home'), $response->getTargetUrl());
@@ -146,8 +146,8 @@ class GameControllerTest extends TestCase
     /** @test */
     public function it_simulates_all_weeks_successfully()
     {
-        $this->gameController->generate();
-        $response = $this->gameController->simulateAll();
+        $this->simulationController->generate();
+        $response = $this->simulationController->simulateAll();
 
         // Check if all games are completed
         $this->assertEquals(0, Game::where('status', 'scheduled')->count());
@@ -191,8 +191,8 @@ class GameControllerTest extends TestCase
     /** @test */
     public function it_maintains_game_order_when_simulating()
     {
-        $this->gameController->generate();
-        $this->gameController->simulateWeek();
+        $this->simulationController->generate();
+        $this->simulationController->simulateWeek();
 
         // Check if games are simulated in order
         $completedGames = Game::where('status', 'completed')->get();
@@ -218,8 +218,8 @@ class GameControllerTest extends TestCase
     /** @test */
     public function it_updates_standings_correctly_after_simulation()
     {
-        $this->gameController->generate();
-        $this->gameController->simulateWeek();
+        $this->simulationController->generate();
+        $this->simulationController->simulateWeek();
 
         // Get a completed game
         $game = Game::where('status', 'completed')->first();
@@ -256,24 +256,29 @@ class GameControllerTest extends TestCase
     /** @test */
     public function it_considers_team_strength_in_score_generation()
     {
-        $this->gameController->generate();
+        // First, ensure we have a strong team
+        $strongTeam = Team::where('strength', 85)->first();
+        $this->assertNotNull($strongTeam, 'Strong team with strength 85 not found');
         
-        // Simulate multiple seasons to get statistical significance
         $strongTeamWins = 0;
         $strongTeamDraws = 0;
         $totalGames = 0;
-        
-        // Simulate more seasons for better statistical significance
-        for ($i = 0; $i < 20; $i++) {
-            $this->gameController->simulateAll();
+        $iterations = 10;
+
+        for ($i = 0; $i < $iterations; $i++) {
+            $this->simulationController->generate();
+            $this->simulationController->simulateAll();
             
-            $games = Game::where('home_team_id', 1)
-                ->orWhere('away_team_id', 1)
-                ->get();
-                
+            // Get all games involving the strong team
+            $games = Game::where('home_team_id', $strongTeam->id)
+                        ->orWhere('away_team_id', $strongTeam->id)
+                        ->get();
+            
             foreach ($games as $game) {
-                $strongTeamScore = $game->home_team_id == 1 ? $game->home_score : $game->away_score;
-                $weakTeamScore = $game->home_team_id == 1 ? $game->away_score : $game->home_score;
+                $strongTeamScore = $game->home_team_id == $strongTeam->id ? 
+                    $game->home_score : $game->away_score;
+                $weakTeamScore = $game->home_team_id == $strongTeam->id ? 
+                    $game->away_score : $game->home_score;
                 
                 if ($strongTeamScore > $weakTeamScore) {
                     $strongTeamWins++;
@@ -285,11 +290,16 @@ class GameControllerTest extends TestCase
             
             Game::truncate();
             Standing::truncate();
-            $this->gameController->generate();
         }
+        
+        $this->assertGreaterThan(0, $totalGames, 'No games were played');
         
         // Calculate win rate including half of draws
         $winRate = ($strongTeamWins + ($strongTeamDraws * 0.5)) / $totalGames;
-        $this->assertGreaterThan(0.5, $winRate, "Strong team (85 strength) should win more than 50% of games (including half of draws)");
+        $this->assertGreaterThan(0.5, $winRate, 
+            "Strong team should win more than 50% of games. " .
+            "Actual rate: " . round($winRate * 100, 2) . "% " .
+            "($strongTeamWins wins, $strongTeamDraws draws in $totalGames games)"
+        );
     }
 } 

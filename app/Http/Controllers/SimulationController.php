@@ -10,12 +10,16 @@ use App\Services\FixtureService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\View\View;
 
-class GameController extends Controller
+class SimulationController extends Controller
 {
-    public function __construct(
-        private readonly FixtureService $fixtureService,
-        private readonly ChampionshipService $championshipService
-    ) {}
+    private FixtureService $fixtureService;
+    private ChampionshipService $championshipService;
+
+    public function __construct(FixtureService $fixtureService, ChampionshipService $championshipService)
+    {
+        $this->fixtureService = $fixtureService;
+        $this->championshipService = $championshipService;
+    }
 
     public function index(): View
     {
